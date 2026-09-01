@@ -116,7 +116,7 @@ CustomerChurnPrediction/
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/hum4nbeing/CustomerChurnPrediction.git
+   git clone https://github.com/hum4nBeing/CustomerChurnPrediction.git
    cd CustomerChurnPrediction
    ```
 
