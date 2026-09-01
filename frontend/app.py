@@ -14,7 +14,7 @@ from components.insights import insights_tab
 from components.prediction import prediction_form
 from components.about import about_tab
 
-# Set page configuration
+# Configure the main page layout and settings
 st.set_page_config(
     page_title="Customer Churn Dashboard",
     page_icon="🔮",
@@ -23,7 +23,7 @@ st.set_page_config(
 )
 
 def main():
-    # Inject Custom CSS
+    # Apply custom CSS styling for UI enhancements
     st.markdown("""
     <style>
     .main-title {
@@ -50,14 +50,14 @@ def main():
     st.markdown('<div class="sub-title">Explore key insights and predict customer churn with interactive visualizations</div>', unsafe_allow_html=True)
     st.divider()
 
-    # Load and filter data once
+    # Fetch dataset and apply global filters only once
     data = load_data()
     filtered_data = filter_data(data)
 
-    # Create tabs with icons
+    # Initialize application tabs with descriptive icons
     tabs = st.tabs(["🏠 Overview", "📊 Insights", "🔮 Prediction", "ℹ️ About"])
 
-    # --- Overview Tab ---
+    # --- Section: Dashboard Overview ---
     with tabs[0]:
         st.header("🏠 Overview")
         display_summary_metrics(filtered_data)
@@ -103,7 +103,7 @@ def main():
         st.dataframe(filtered_data.head(20))
         
         st.markdown("## Category-Based Analysis")
-        # 1. Dataset Understanding and Initial Exploration
+        # 1. Initial Data Inspection and Understanding
         with st.expander("🧩 Dataset Understanding and Initial Exploration"):
             st.info("Checking for missing values:")
             null_fig = plot_null_values_heatmap(filtered_data)
@@ -112,17 +112,17 @@ def main():
             else:
                 st.info("No missing values detected.")
         
-        # 2. Demographic Analysis
+        # 2. Demographics Overview
         with st.expander("🔍 Demographic Analysis"):
             st.plotly_chart(plot_gender_vs_churn(filtered_data), use_container_width=True, key="plot_gender_vs_churn")
             st.plotly_chart(plot_senior_vs_churn(filtered_data), use_container_width=True, key="plot_senior_vs_churn")
             st.plotly_chart(plot_partner_dependents_vs_churn(filtered_data), use_container_width=True, key="plot_partner_dependents_vs_churn")
         
-        # 3. Service Usage and Subscription Type
+        # 3. Customer Services and Subscription Options
         with st.expander("📶 Service Usage and Subscription Type"):
             st.plotly_chart(plot_service_usage_vs_churn(filtered_data), use_container_width=True, key="plot_service_usage_vs_churn")
         
-        # 4. Tenure and Payment Patterns
+        # 4. Analysis of Tenure and Billing Patterns
         with st.expander("💰 Tenure and Payment Patterns"):
             fig_pb = plot_paperlessbilling_vs_churn(filtered_data)
             if fig_pb:
@@ -136,26 +136,26 @@ def main():
                 st.info("No 'TotalCharges' data available.")
             st.plotly_chart(plot_scatter_matrix(filtered_data), use_container_width=True, key="plot_scatter_matrix")
         
-        # 5. Correlations and Feature Importance
+        # 5. Feature Importance and Correlation Measures
         with st.expander("📈 Correlations and Feature Importance"):
-            # The correlation heatmap was shown in Insights, but we add a scatter matrix here.
+            # Scatter matrix provided here (correlation heatmap is in Insights tab).
             st.plotly_chart(plot_scatter_matrix(filtered_data), use_container_width=True, key="plot_scatter_matrix_2")
         
-        # 6. Segment-Based Analysis (Clustering)
+        # 6. Customer Clustering and Segmentation
         with st.expander("🧠 Segment-Based Analysis"):
             st.plotly_chart(plot_kmeans_clusters(filtered_data), use_container_width=True, key="plot_kmeans_clusters")
     
-    # --- Insights Tab ---
+    # --- Section: Deep Insights ---
     with tabs[1]:
         insights_tab(filtered_data)
 
-    # --- Prediction Tab ---
+    # --- Section: Real-time Prediction ---
     with tabs[2]:
         st.header("🔮 Prediction")
         st.markdown("Enter customer details below to predict churn using our trained model.")
         prediction_form()
 
-    # --- About Tab ---
+    # --- Section: About the App ---
     with tabs[3]:
         about_tab()
 if __name__ == "__main__":

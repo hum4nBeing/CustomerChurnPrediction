@@ -1,4 +1,4 @@
-# backend/main.py
+# Entry point: backend/main.py
 
 from typing import List
 from fastapi import FastAPI, HTTPException
@@ -8,7 +8,7 @@ import pandas as pd
 
 app = FastAPI(title="Customer Churn Prediction API")
 
-# --- Load the Trained Model ---
+# --- Attempt to load the pre-trained ML model ---
 try:
     with open('model.pkl', 'rb') as f:
         model = pickle.load(f)
@@ -16,7 +16,7 @@ except Exception as e:
     model = None
     print("Error loading the model:", e)
 
-# --- Define Input Schema ---
+# --- Define the API Request Body Structure ---
 class CustomerInput(BaseModel):
     tenure:        conint(ge=0)
     monthly_charges: confloat(ge=0.0)
@@ -30,17 +30,17 @@ class CustomerInput(BaseModel):
     paperless_billing: constr(strict=True)
     payment_method:    constr(strict=True)
 
-    # ONE field instead of seven: a list of service names
+    # Grouped services list replacing individual flags
     services_list:    List[constr(strict=True)] = []
 
 def make_feature_df(data: CustomerInput) -> pd.DataFrame:
     d = data.dict()
 
-    # 1) Derive total_charges & avg_charge_per_month
+    # 1) Calculate total charges and monthly average
     d['total_charges'] = d['tenure'] * d['monthly_charges']
     d['avg_charge_per_month'] = d['total_charges'] / (d['tenure'] + 1e-6)
 
-    # 2) Tenure bucket
+    # 2) Assign tenure to a specific categorical bucket
     t = d['tenure']
     if t <= 12:
         d['tenure_bucket'] = '0-12'
@@ -51,7 +51,7 @@ def make_feature_df(data: CustomerInput) -> pd.DataFrame:
     else:
         d['tenure_bucket'] = '48+'
 
-    # 3) Reconstruct the 7 service flags from services_list
+    # 3) Restore the individual boolean service flags
     svc_map = {
         "Multiple Lines":     "multiple_lines",
         "Online Security":    "online_security",
@@ -61,31 +61,31 @@ def make_feature_df(data: CustomerInput) -> pd.DataFrame:
         "Streaming TV":       "streaming_tv",
         "Streaming Movies":   "streaming_movies",
     }
-    # initialize all to "No"
+    # set default value "No" for all
     for col in svc_map.values():
         d[col] = "No"
-    # mark selected as "Yes"
+    # update chosen services to "Yes"
     for svc in d.pop('services_list', []):
         key = svc_map.get(svc)
         if key:
             d[key] = "Yes"
 
-    # 4) Compute services_count if your pipeline uses it
+    # 4) Count active services if required by the model
     d['services_count'] = sum(1 for col in svc_map.values() if d[col] == "Yes")
 
-    # 5) Build DataFrame with exact column order your pipeline expects
+    # 5) Construct the final DataFrame matching model's expected feature order
     cols = [
         'tenure', 'monthly_charges', 'total_charges', 'avg_charge_per_month',
         'services_count', 'contract', 'gender', 'senior_citizen', 'partner',
         'dependents', 'internet_service', 'paperless_billing', 'payment_method',
-        # the 7 flags:
+        # individual service flags:
         'multiple_lines', 'online_security', 'online_backup',
         'device_protection', 'tech_support', 'streaming_tv', 'streaming_movies',
         'tenure_bucket'
     ]
     return pd.DataFrame([d], columns=cols)
 
-# --- Prediction Endpoint ---
+# --- API Route for Churn Prediction ---
 @app.post("/predict")
 async def predict_churn(data: CustomerInput):
     if model is None:
@@ -94,14 +94,14 @@ async def predict_churn(data: CustomerInput):
     try:
         df = make_feature_df(data)
         proba = model.predict_proba(df)[0, 1]
-        threshold = 0.5  # or your tuned threshold
+        threshold = 0.5  # apply optimal probability cutoff
         prediction = "Yes" if proba >= threshold else "No"
         return {"prediction": prediction, "probability": proba}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {e}")
 
-# --- Health Check ---
+# --- Application Liveness Probe ---
 @app.get("/health")
 async def health():
     return {"status": "ok"}

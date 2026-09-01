@@ -28,7 +28,7 @@ from sklearn.metrics import (
     RocCurveDisplay
 )
 
-# ─── 0) Database Connection ───────────────────────────────────────────────────
+# ─── 0) Establish Database Connectivity ───────────────────────────────────────
 DB_USER     = os.getenv('DB_USER', 'user')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
 DB_HOST     = os.getenv('DB_HOST', 'postgres')
@@ -39,16 +39,16 @@ ENGINE = create_engine(
     f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 )
 
-# ─── 1) Load & Feature–Engineer ───────────────────────────────────────────────
+# ─── 1) Data Ingestion and Feature Engineering ───────────────────────────────
 def load_and_engineer() -> pd.DataFrame:
     df = pd.read_sql("SELECT * FROM customers", ENGINE)
 
-    # Binary target
+    # Encode target variable as binary
     df['churn'] = df['churn'].str.lower().map({'yes':1, 'no':0})
-    # Ensure numeric
+    # Force total_charges to float
     df['total_charges'] = pd.to_numeric(df['total_charges'], errors='coerce')
 
-    # Keep base features
+    # Retain primary features
     base = [
         'tenure','monthly_charges','total_charges',
         'contract','gender','senior_citizen','partner','dependents',
@@ -58,7 +58,7 @@ def load_and_engineer() -> pd.DataFrame:
     ]
     df = df[base + ['churn']].dropna()
 
-    # Engineered features
+    # Generate new derivative features
     df['avg_charge_per_month'] = df['total_charges'] / (df['tenure'] + 1e-3)
     svc_cols = [
         'multiple_lines','online_security','online_backup',
@@ -76,9 +76,9 @@ def load_and_engineer() -> pd.DataFrame:
     )
     return df
 
-# ─── 2) Split & Preprocess ────────────────────────────────────────────────────
+# ─── 2) Data Partitioning & Preprocessing Pipeline ────────────────────────────
 def build_preprocessor():
-    # Numeric pipeline
+    # Pipeline for numerical features
     num_feats = [
         'tenure','monthly_charges','total_charges',
         'avg_charge_per_month','services_count'
@@ -88,7 +88,7 @@ def build_preprocessor():
         ('scaler', StandardScaler())
     ])
 
-    # Categorical pipeline
+    # Pipeline for categorical features
     cat_feats = [
         'contract','gender','senior_citizen','partner','dependents',
         'internet_service','paperless_billing','payment_method',
@@ -104,17 +104,17 @@ def build_preprocessor():
         ('cat', cat_pipe, cat_feats)
     ])
 
-# ─── 3) Train + Hyperparameter Tuning ─────────────────────────────────────────
+# ─── 3) Model Training and Hyperparameter Search ─────────────────────────────
 def train_and_tune(X_train, y_train):
     preprocessor = build_preprocessor()
 
-    # Full pipeline
+    # Assemble complete processing pipeline
     pipe = Pipeline([
         ('preprocessor', preprocessor),
         ('model', GradientBoostingClassifier(random_state=42))
     ])
 
-    # Hyperparameter space (20 random draws)
+    # Define hyperparameter grid for random search
     param_dist = {
         'model__n_estimators':     [100, 200, 300, 500],
         'model__learning_rate':    [0.01, 0.03, 0.05, 0.1],
@@ -140,7 +140,7 @@ def train_and_tune(X_train, y_train):
     print("▶️ Best CV ROC AUC:", search.best_score_)
     return search.best_estimator_
 
-# ─── 4) Threshold Optimization ────────────────────────────────────────────────
+# ─── 4) Classification Threshold Tuning ──────────────────────────────────────
 def find_best_threshold(y_true, y_proba):
     best_thr, best_f1 = 0.5, 0
     for thr in np.linspace(0.1, 0.9, 81):
@@ -150,19 +150,19 @@ def find_best_threshold(y_true, y_proba):
             best_f1, best_thr = f1, thr
     return best_thr, best_f1
 
-# ─── 5) Evaluate & Report ────────────────────────────────────────────────────
+# ─── 5) Model Evaluation and Metrics Reporting ───────────────────────────────
 def evaluate_and_report(model, X_test, y_test, threshold):
     os.makedirs('reports', exist_ok=True)
 
     proba = model.predict_proba(X_test)[:,1]
     preds = (proba >= threshold).astype(int)
 
-    # Classification report
+    # Generate text-based classification report
     cr = classification_report(y_test, preds)
     with open('reports/classification_report.txt','w') as f:
         f.write(cr)
 
-    # Confusion matrix
+    # Compute and plot confusion matrix
     cm = confusion_matrix(y_test, preds)
     fig, ax = plt.subplots()
     ax.imshow(cm, cmap='Blues')
@@ -175,13 +175,13 @@ def evaluate_and_report(model, X_test, y_test, threshold):
     fig.savefig('reports/confusion_matrix.png')
     plt.close(fig)
 
-    # ROC curve
+    # Plot Receiver Operating Characteristic (ROC) curve
     fig2, ax2 = plt.subplots()
     RocCurveDisplay.from_predictions(y_test, proba, ax=ax2)
     fig2.savefig('reports/roc_curve.png')
     plt.close(fig2)
 
-    # Markdown summary
+    # Compile markdown summary report
     auc = roc_auc_score(y_test, proba)
     f1v = f1_score(y_test, preds)
     md = f"""\
@@ -202,33 +202,33 @@ Edit
     with open('reports/model_report.md','w') as f:
         f.write(md)
 
-# ─── 6) Main ─────────────────────────────────────────────────────────────────
+# ─── 6) Main Execution Workflow ──────────────────────────────────────────────
 if __name__ == '__main__':
-    # Load & engineer
+    # Ingest data and create features
     df = load_and_engineer()
 
-    # Split
+    # Train-test split
     X = df.drop('churn', axis=1)
     y = df['churn']
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
     )
 
-    # Train & tune
+    # Fit and optimize model
     print("🔍 Tuning Gradient Boosting...")
     gbm_pipe = train_and_tune(X_train, y_train)
 
-    # Threshold tuning
+    # Optimize decision boundary threshold
     print("🔧 Finding best classification threshold...")
     proba_test = gbm_pipe.predict_proba(X_test)[:,1]
     thr, f1v = find_best_threshold(y_test, proba_test)
     print(f"👉 Best threshold = {thr:.2f}, F1 = {f1v:.3f}")
 
-    # Evaluate & save
+    # Evaluate performance and export metrics
     print("📊 Generating reports...")
     evaluate_and_report(gbm_pipe, X_test, y_test, thr)
 
-    # Persist model
+    # Save the trained model to disk
     with open('model.pkl','wb') as f:
         pickle.dump(gbm_pipe, f)
     print("✅ Done. Model and reports are saved.")
